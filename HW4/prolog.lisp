@@ -1,21 +1,18 @@
-;; Kural ve Sorgu Yapısı
+;; I use parsing the axioms to maintain them easily
 (defun parse-axiom (axiom)
-  "Bir axiom listesini head ve body olarak ayırır."
   (if (and (listp axiom) (member '< axiom))
       (let ((head (car axiom))
             (body (cddr axiom)))
         (list :head head :body body))
       (list :head (car axiom) :body nil)))
 
+
 (defun parse-query (query)
-  "Bir sorguyu alır ve işlenebilir hale getirir."
   (car query))
 
-;; Birleşim İşlemi (Unification)
+;; it merge them (birleştirir)
 (defun unify (term1 term2)
-  "İki terimi birleştirir ve eşleşme tablosu döndürür."
   (labels ((unify-lists (list1 list2)
-             "İki listeyi eleman eleman birleştirir."
              (if (or (null list1) (null list2))
                  nil
                  (let ((first-unify (unify (car list1) (car list2)))
@@ -24,31 +21,30 @@
                        (append first-unify rest-unify)
                        (or first-unify rest-unify))))))
     (cond
-      ((equal term1 term2) nil) ;; Terimler eşleşiyor
+      ((equal term1 term2) nil) ;; terms are the same
       ((and (stringp term1) (string= (subseq term1 0 1) "X"))
-       (list (list term1 term2))) ;; Term1 bir değişken
+       (list (list term1 term2))) ;; term1 is a değişken
       ((and (stringp term2) (string= (subseq term2 0 1) "X"))
-       (list (list term2 term1))) ;; Term2 bir değişken
+       (list (list term2 term1))) ;; term2 is a değişken
       ((and (listp term1) (listp term2))
-       (unify-lists term1 term2)) ;; Liste birleşimi
-      (t nil)))) ;; Başarısız birleşim
+       (unify-lists term1 term2)) ;; lists merging
+      (t nil)))) ;; failed merging
 
 (defun filter-invalid-bindings (bindings axiom relation)
-  "Bağlamlardan uygun olmayanları çıkarır. Özellikle 'uncle' ilişkisinde hem 'father' hem 'uncle' çakışmalarını kontrol eder."
   (if (not (equal relation "uncle"))
-      bindings ;; Eğer ilişki 'uncle' değilse bağlamları olduğu gibi döndür
+      bindings ;; if it's not uncle return what I have
       (remove-if
        (lambda (binding)
          (let ((person (second binding)))
            (or
-            ;; Eğer kişi bir "father" ise ve aynı zamanda "uncle" olarak işaretlenmişse bağlamı çıkar
+            ;; if someone marked as "uncle" but its also "father" dont return that
             (some (lambda (ax)
                     (and (listp ax)
                          (listp (first ax))
                          (equal (first (first ax)) "father")
                          (equal person (second (first ax)))))
                   axiom)
-            ;; Eğer kişi bir "mother" ise ve aynı zamanda "uncle" olarak işaretlenmişse bağlamı çıkar
+               ;; if someone marked as "uncle" but its also "mother" dont return that. because of the parent situation I need to add that condition
             (some (lambda (ax)
                     (and (listp ax)
                          (listp (first ax))
@@ -58,7 +54,6 @@
        bindings)))
 
 (defun filter-ancestor-bindings (bindings)
-  "Ancestor bağlamlarından parent olanları filtreler."
   (remove-if
    (lambda (binding)
      (some (lambda (relation)
@@ -70,7 +65,6 @@
 
 
 (defun prolog-prove (axioms queries)
-  "Prolog çözümleyici."
   (labels ((resolve (query bindings)
              (let ((results '()))
                (dolist (axiom axioms)
@@ -117,7 +111,7 @@
           nil))))
 
 
-;; Testler
+;; Tests
 (format t "Test 1 Result: ~a~%"
          (prolog-prove
           '((("father" "jim" "jill"))
