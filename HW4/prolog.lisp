@@ -57,58 +57,65 @@
                   axiom))))
        bindings)))
 
+(defun filter-ancestor-bindings (bindings)
+  "Ancestor bağlamlarından parent olanları filtreler."
+  (remove-if
+   (lambda (binding)
+     (some (lambda (relation)
+             (and (listp relation)
+                  (equal (first relation) "parent")
+                  (equal (second relation) (second binding))))
+           bindings))
+   bindings))
 
 
 (defun prolog-prove (axioms queries)
-  "Prolog çözümleyici. Axioms ve queries alır ve çözüm sonucunu döndürür."
+  "Prolog çözümleyici."
   (labels ((resolve (query bindings)
-             (let ((results '()))  ;; Çözümleri toplamak için bir liste
+             (let ((results '()))
                (dolist (axiom axioms)
                  (let* ((parsed-axiom (parse-axiom axiom))
                         (head (getf parsed-axiom :head))
                         (body (getf parsed-axiom :body))
                         (unified (unify query head)))
-              ;;     (format t "Checking Axiom: ~a~%" axiom) ;; Hata ayıklama mesajı
-                ;;   (format t "Unified Result: ~a~%" unified) ;; Hata ayıklama mesajı
-                   (when (and unified (not (null unified)))  ;; Bağlamın NIL olmadığını kontrol et
+                   (when (and unified (not (null unified)))
                      (let ((new-bindings (append bindings unified)))
-                     ;;  (format t "New Bindings: ~a~%" new-bindings) ;; Hata ayıklama mesajı
                        (if (null body)
-                           ;; Eğer body yoksa, bu bir fact, çözümleri topla
                            (progn
-                             (let ((filtered-bindings (filter-invalid-bindings new-bindings axioms (first query))))
-                               (when filtered-bindings ;; Eğer bağlamlar geçerliyse ekle
-                               ;;  (format t "Fact found, adding bindings: ~a~%" filtered-bindings)
+                             (let ((filtered-bindings
+                                    (if (equal (first query) "ancestor")
+                                        (filter-ancestor-bindings new-bindings)
+                                        (filter-invalid-bindings new-bindings axioms (first query)))))
+                               (when filtered-bindings
                                  (push filtered-bindings results))))
-                           ;; Body alt sorgularını çöz
                            (let ((sub-results
-                                  (mapcan (lambda (subquery)
-                                            (resolve subquery new-bindings))
+                                  (mapcan (lambda (subquery) (resolve subquery new-bindings))
                                           body)))
-                             ;; Alt sorguların tümü başarılıysa ve çakışma yoksa sonucu ekle
                              (when (and (every #'identity sub-results) (not (null sub-results)))
-                               (let ((merged-bindings (reduce (lambda (x y)
-                                                               (if (and x y) (append x y) nil))
-                                                             sub-results)))
-                                 (let ((filtered-bindings (filter-invalid-bindings merged-bindings axioms (first query))))
-                                   (when filtered-bindings ;; Eğer bağlamlar geçerliyse ekle
-                                     (format t "Sub-query resolved: ~a~%" filtered-bindings)
+                               (let ((merged-bindings
+                                      (reduce (lambda (x y)
+                                                (if (and x y) (append x y) nil))
+                                              sub-results)))
+                                 (let ((filtered-bindings
+                                        (if (equal (first query) "ancestor")
+                                            (filter-ancestor-bindings merged-bindings)
+                                            (filter-invalid-bindings merged-bindings axioms (first query)))))
+                                   (when filtered-bindings
                                      (push filtered-bindings results)))))))))))
                results)))
-    ;; Ana çözüm döngüsü
     (let ((result (mapcan (lambda (query) (resolve query nil)) queries)))
       (if result
-          (remove-if #'null ;; Tüm `NIL` değerlerini kaldır
-                     (mapcar (lambda (binding)
-                               (mapcar (lambda (pair)
-                                         (if (and (listp pair)
-                                                  (equal (length pair) 2)
-                                                  (string= (subseq (first pair) 0 1) "X"))
-                                             (list (first pair) (second pair))
-                                             pair))
-                                       binding))
-                             (remove-duplicates result :test #'equal))) ;; Tüm tekrar eden bağlamları kaldır
+          (mapcar (lambda (binding)
+                    (mapcar (lambda (pair)
+                              (if (and (listp pair)
+                                       (equal (length pair) 2)
+                                       (string= (subseq (first pair) 0 1) "X"))
+                                  (list (first pair) (second pair))
+                                  pair))
+                            binding))
+                  (remove-duplicates result :test #'equal))
           nil))))
+
 
 ;; Testler
 (format t "Test 1 Result: ~a~%"
@@ -131,10 +138,17 @@
             (("uncle" "X" "Y") "<" ("sibling" "X" "Z") ("parent" "Z" "Y")))
           '(("uncle" "X" "jill"))))
 
+(let (
+      (axioms '(
+                (("father" "jim" "jill"))
+                (("mother" "mary" "jill"))
+                (("father" "samm" "jim"))
+                (("ancestor" "X" "Y") "<" ("parent" "X" "Y"))
+                (("ancestor" "X" "Y") "<" ("ancestor" "X" "Z") ("ancestor" "Z" "Y"))
+                (("parent" "X" "Y") "<" ("mother" "X" "Y"))
+                (("parent" "X" "Y") "<" ("father" "X" "Y"))))
+      (query1 '(("ancestor" "X" "jill")))
+      (query2 '(("ancestor" "X" "jill") ("mother" "X" "bob"))))
 
-
-
-
-
-
-
+  (format t "Test 4 Result (Query1): ~a~%" (prolog-prove axioms query1))
+  (format t "Test 5 Result (Query2): ~a~%" (prolog-prove axioms query2)))
