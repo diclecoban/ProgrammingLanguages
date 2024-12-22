@@ -87,6 +87,15 @@
            bindings))
    bindings))
 
+(defun is-parent (axioms parent child)
+  (or (some (lambda (ax) (and (equal (first ax) "father")
+                              (equal (second ax) parent)
+                              (equal (third ax) child))) axioms)
+      (some (lambda (ax) (and (equal (first ax) "mother")
+                              (equal (second ax) parent)
+                              (equal (third ax) child))) axioms)))
+
+
 
 (defun prolog-prove (axioms queries)
   (labels ((resolve (query bindings)
@@ -96,12 +105,16 @@
                         (head (getf parsed-axiom :head))
                         (body (getf parsed-axiom :body))
                         (unified (unify query head)))
+                   (when (and (equal (first query) "parent")
+                              (is-parent axioms (second query) (third query)))
+                     (push (append bindings (list (list "parent" (second query) (third query)))) results))
                    (when (and unified (not (null unified)))
                      (let ((new-bindings (append bindings unified)))
                        (if (null body)
                            (progn
                              (let ((filtered-bindings
                                     (cond
+                                     ((equal (first query) "parent") new-bindings)
                                      ((equal (first query) "ancestor")
                                       (filter-ancestor-bindings new-bindings))
                                      ((equal (first query) "uncle")
@@ -121,6 +134,7 @@
                                               sub-results)))
                                  (let ((filtered-bindings
                                         (cond
+                                         ((equal (first query) "parent") merged-bindings)
                                          ((equal (first query) "ancestor")
                                           (filter-ancestor-bindings merged-bindings))
                                          ((equal (first query) "uncle")
@@ -144,11 +158,13 @@
                   (remove-duplicates result :test #'equal))
           nil))))
 
+
+
 ;; Tests
 (format t "Test 1 Result: ~a~%"
          (prolog-prove
           '((("father" "jim" "jill"))
-            (("mother" "mary" "jill")))
+            (("mother" "mary" "juliana")))
           '(("parent" "X" "jill"))))
 
 (format t "Test 2 Result: ~a~%"
