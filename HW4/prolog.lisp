@@ -30,7 +30,7 @@
        (unify-lists term1 term2)) ;; lists merging
       (t nil)))) ;; failed merging
 
-(defun filter-invalid-bindings (bindings axiom relation)
+(defun filter-uncle-bindings (bindings axiom relation)
   (if (not (equal relation "uncle"))
       bindings ;; if it's not uncle return what I have
       (remove-if
@@ -52,6 +52,30 @@
                          (equal person (second (first ax)))))
                   axiom))))
        bindings)))
+
+(defun filter-aunt-bindings (bindings axiom relation)
+  (if (not (equal relation "aunt"))
+      bindings ;; if it's not aunt return what I have
+      (remove-if
+       (lambda (binding)
+         (let ((person (second binding)))
+           (or
+            ;; if someone marked as "aunt" but its also "father" dont return that
+            (some (lambda (ax)
+                    (and (listp ax)
+                         (listp (first ax))
+                         (equal (first (first ax)) "father")
+                         (equal person (second (first ax)))))
+                  axiom)
+               ;; if someone marked as "aunt" but its also "mother" dont return that. because of the parent situation I need to add that condition
+            (some (lambda (ax)
+                    (and (listp ax)
+                         (listp (first ax))
+                         (equal (first (first ax)) "mother")
+                         (equal person (second (first ax)))))
+                  axiom))))
+       bindings)))
+
 
 (defun filter-ancestor-bindings (bindings)
   (remove-if
@@ -77,9 +101,14 @@
                        (if (null body)
                            (progn
                              (let ((filtered-bindings
-                                    (if (equal (first query) "ancestor")
-                                        (filter-ancestor-bindings new-bindings)
-                                        (filter-invalid-bindings new-bindings axioms (first query)))))
+                                    (cond
+                                     ((equal (first query) "ancestor")
+                                      (filter-ancestor-bindings new-bindings))
+                                     ((equal (first query) "uncle")
+                                      (filter-uncle-bindings new-bindings axioms (first query)))
+                                     ((equal (first query) "aunt")
+                                      (filter-aunt-bindings new-bindings axioms (first query)))
+                                     (t new-bindings))))
                                (when filtered-bindings
                                  (push filtered-bindings results))))
                            (let ((sub-results
@@ -91,9 +120,14 @@
                                                 (if (and x y) (append x y) nil))
                                               sub-results)))
                                  (let ((filtered-bindings
-                                        (if (equal (first query) "ancestor")
-                                            (filter-ancestor-bindings merged-bindings)
-                                            (filter-invalid-bindings merged-bindings axioms (first query)))))
+                                        (cond
+                                         ((equal (first query) "ancestor")
+                                          (filter-ancestor-bindings merged-bindings))
+                                         ((equal (first query) "uncle")
+                                          (filter-uncle-bindings merged-bindings axioms (first query)))
+                                         ((equal (first query) "aunt")
+                                          (filter-aunt-bindings merged-bindings axioms (first query)))
+                                         (t merged-bindings))))
                                    (when filtered-bindings
                                      (push filtered-bindings results)))))))))))
                results)))
@@ -110,7 +144,6 @@
                   (remove-duplicates result :test #'equal))
           nil))))
 
-
 ;; Tests
 (format t "Test 1 Result: ~a~%"
          (prolog-prove
@@ -120,9 +153,9 @@
 
 (format t "Test 2 Result: ~a~%"
          (prolog-prove
-          '((("sibling" "samm" "jim"))
+          '((("sibling" "jane" "jim"))
             (("father" "jim" "jill")))
-          '(("uncle" "X" "jill"))))
+          '(("aunt" "X" "jill"))))
 
 (format t "Test 3 Result: ~a~%"
          (prolog-prove
